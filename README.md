@@ -29,8 +29,9 @@ cmake --install .
 - Adjust settings in `hackGU/scripts/HackGULastRecodeFix.yml`
 
 ## Screenshots
-![Demo](images/HackGULastRecodeFix_1.gif)
-<p style="text-align: center;">Fix disabled → Fix enabled with centered HUD → Fix enabled with spanned HUD</p>
+| ![Demo](images/HackGULastRecodeFix_1.gif) |
+| :-: |
+| Fix disabled → Fix enabled |
 
 ## License
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
