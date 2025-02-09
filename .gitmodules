@@ -1,0 +1,12 @@
+[submodule "spdlog"]
+	path = spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "yaml-cpp"]
+	path = yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git
+[submodule "safetyhook"]
+	path = safetyhook
+	url = https://github.com/cursey/safetyhook.git
+[submodule "zydis"]
+	path = zydis
+	url = https://github.com/zyantific/zydis.git
