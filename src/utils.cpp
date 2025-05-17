@@ -99,10 +99,11 @@ namespace Utils
             auto end = const_cast<char*>(pattern) + strlen(pattern);
 
             for (auto current = start; current < end; ++current) {
-                if (*current == '?') {
-                    ++current;
-                    if (*current == '?')
-                        ++current;
+                if (*current == ' ') {
+                    continue;
+                }
+                else if (*current == '?') {
+                    current += 2;
                     bytes.push_back(-1);
                 }
                 else {

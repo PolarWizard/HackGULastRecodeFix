@@ -80,7 +80,7 @@
 #include "utils.hpp"
 
 // Macros
-#define VERSION "1.0.0"
+#define VERSION "1.0.1"
 #define LOG(STRING, ...) spdlog::info("{} : " STRING, __func__, ##__VA_ARGS__)
 
 // .yml to struct
@@ -763,6 +763,84 @@ void cutsceneFix() {
 }
 
 /**
+ * @brief Fixes aspect ratio for cutscenes.
+ *
+ * This function performs the following tasks:
+ * 1. Checks if the master enable is enabled based on the configuration.
+ * 2. Searches for a specific memory pattern in the base module.
+ * 3. Hooks at the identified pattern to modify game logic.
+ *
+ * @details
+ * The function uses a pattern scan to find a specific byte sequence in the memory of the base module.
+ * The hook injects new game logic.
+ *
+ * How was this found?
+ * The anti-aliasing fix was relatively simple to find. We can use the assumption that the code for
+ * the game graphics settings in general are all in tight proximity to each other. At first analysis
+ * I tried to see if the settings are encoded as strings and quickly found out they are not. But the
+ * one thing I did already know is that the resolution strings are encoded as decimal values within
+ * the code. Based on this info I tracked down the game uses a table that stores the values for
+ * resolution and passes in an index to the table to get the value.
+ *
+ * Getting out of the function where the table indexing happens leads us into a function where a lot
+ * of Windows API game window calls are made, and this is where the anti-aliasing value is set, so from
+ * here we are onto something. Going backwards a little bit and setting a bunch of breakpoints on a
+ * bunch of conditional jumps and playing around with the anti-aliasing value we can see that the
+ * setting that in fact also traverse this code. A couple breakpoints later and we are sitting at
+ * the code guarded by a conditional jump that only gets triggered by a change in the anti-aliasing
+ * value:
+ * hackGU_title.dll+10BFF4 - 44 8989 B00B0000 - mov [rcx+BB0],r9
+ *
+ * Register r9 can have the following values for anti-aliasing:
+ * 1 - LOW
+ * 2 - MEDIUM
+ * 3 - HIGH
+ *
+ * The mod for whatever reason breaks when anti-aliasing is set to HIGH, so we need to make sure that
+ * high cannot be acheived, so when a value greater than 2 is detected we need to set it to 2. Yes,
+ * with this method we are not allowing the game to use the highest setting, which means reduced
+ * visual fidelity, but this is a trade off we have to make in order to get the mod to work. As I am
+ * a bit too lazy to figure out how and where the game uses the HIGH setting that causes this break.
+ *
+ * @return void
+ */
+void constrainAntiAliasing() {
+    const char* patternFind  = "44 0F BE 4A 10    44 0F BE 52 11";
+    uintptr_t  hookOffset = 0;
+
+    bool enable = yml.masterEnable;
+    LOG("Fix {}", enable ? "Enabled" : "Disabled");
+    if (enable) {
+        std::vector<uint64_t> addr;
+        Utils::patternScan(baseModule, patternFind, &addr);
+        if (addr.size() > 0) {
+            uint8_t* hit = (uint8_t*)addr[0];
+            uintptr_t absAddr = (uintptr_t)hit;
+            uintptr_t relAddr = (uintptr_t)hit - (uintptr_t)baseModule;
+            LOG("Found '{}' @ {:s}+{:x}", patternFind, strBaseModule, relAddr);
+            // Memory leak caused by SafetyMidHook object
+            uintptr_t hookAbsAddr = absAddr + hookOffset;
+            uintptr_t hookRelAddr = relAddr + hookOffset;
+            centerUiHook.push_back(
+                safetyhook::create_mid(
+                    reinterpret_cast<void*>(hookAbsAddr),
+                    [](SafetyHookContext& ctx) {
+                        uint8_t antiAliasingVal = *(uint8_t*)(ctx.rdx + 0x10);
+                        if (antiAliasingVal > 0x2) {
+                            *(uint8_t*)(ctx.rdx + 0x10) = 0x2;
+                        }
+                    }
+                )
+            );
+            LOG("Hooked @ {:s}+{:x}", strBaseModule, hookRelAddr);
+        }
+        else {
+            LOG("Did not find '{}'", patternFind);
+        }
+    }
+}
+
+/**
  * @brief Wait for a game DLL from the `gameDllTable` to load.
  *
  * @return void
@@ -828,6 +906,7 @@ DWORD __stdcall Main(void* lpParameter) {
     readYml();
     while(1) {
         waitForGameDllLoad();
+        constrainAntiAliasing();
         viewportFix();
         aspectRatioFix();
         centerUiFix();
